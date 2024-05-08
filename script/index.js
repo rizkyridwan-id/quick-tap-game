@@ -15,7 +15,7 @@ const color = {
     "GREEN": "#44CF6C",
     "BLUE": "#3F84E5",
     "DANGER": "#B20D30",
-    "GHOST": "rgba(251, 251, 255, 0.7)"
+    "GHOST": "rgba(251, 251, 255, 0.2)"
 }
 let circleList = []
 let playerScore = 0
@@ -29,20 +29,26 @@ let mouse = {
  */
 class Circle {
     constructor() {
-        this.x = Math.random() * (canvas.width - 200) + 100
-        this.y = Math.random() * (canvas.height - 200) + 100
+        this.x = this._randomPoinInCanvas()
+        this.y = this._randomPoinInCanvas(true)
+        this.vX = Math.random() * 3 - 1.5
+        this.vY = Math.random() * 3 - 1.5
+
         this.size = Math.random() * 50 + 15
         this.color = this._generateColor()
         this.score = this._calculateScore()
         this.isClicked = false
+    }
 
-        this._regenerateRandPosition()
+    _randomPoinInCanvas(isVertical = false) {
+        const key = isVertical ? "height" : "width"
+        return Math.random() * (canvas[key] - 200) + 100
     }
 
     _generateColor() {
         const dangerCount = circleList.filter(it => it.color === color.DANGER).length
-
-        if(dangerCount >= 2) {
+        const dangerRandom = Math.floor(Math.random() * 1 + 1)
+        if(dangerCount >= dangerRandom) {
             if(this.size <= 22) {
                 return color.GOLD
             } else if (this.size <= 35) {
@@ -72,13 +78,15 @@ class Circle {
     }
 
     _isCollideOrIn(cX, cY, cR) {
-        const distX = cX - this.x
-        const distY = cY - this.y
-        const distance = Math.sqrt(Math.pow(distX, 2) + Math.pow(distY, 2))
+        const distance = this._dist(cX, cY)
 
         if(distance <= cR + this.size) {
            return true
         }
+    }
+
+    _dist(x, y) {
+        return Math.sqrt(Math.pow(x - this.x, 2) + Math.pow(y - this.y, 2))
     }
 
     _regenerateRandPosition() {
@@ -87,14 +95,12 @@ class Circle {
             const {x, y, size} = circleList[i]
             isCollide = this._isCollideOrIn(x, y, size + 30)
             if(isCollide) {
+                this.x = this._randomPoinInCanvas()
+                this.y = this._randomPoinInCanvas(true)
                 break;
             }
         }
-        if(isCollide) {
-            this.x = Math.random() * (canvas.width - 200) + 100
-            this.y = Math.random() * (canvas.height - 200) + 100
-            this._regenerateRandPosition()
-        } 
+        return isCollide && this._regenerateRandPosition() 
     }
 
     _addResizeAnimation() {
@@ -109,8 +115,110 @@ class Circle {
         this.counter++
     }
 
+    _lineCircle(x1, y1, x2, y2) {
+        const inside1 = this._pointCircle(x1, y1);
+        const inside2 = this._pointCircle(x2, y2);
+        if(inside1 || inside2) return true
+
+        let distX = x1 - x2;
+        let distY = y1 - y2;
+        const lineLen = Math.sqrt( Math.pow(distX, 2) + Math.pow(distY, 2) );
+
+        const dot= ( ((this.x - x1) * (x2 - x1)) + ((this.y - y1) * (y2 - y1)) ) / Math.pow(lineLen, 2)
+        
+        const closestX = x1 + (dot * (x2 - x1))
+        const closestY = y1 + (dot * (y2 - y1))
+
+        // const onSegment = this._linePoint(x1, y1, x2, y2, closestX, closestY)
+        // if(!onSegment) return false
+
+        distX = closestX - this.x
+        distY = closestY - this.y
+        const distance = Math.sqrt( Math.pow(distX, 2) + Math.pow(distY, 2) );
+
+        if(distance <= this.size ) {
+            return true
+        }
+    }
+
+    _pointCircle(x, y) {
+        const distance = this._dist(x, y);
+        if(distance <= this.size) {
+            return true
+        }
+    }
+
+    _linePoint(x1, y1, x2, y2, px, py) {
+        const d1 = this._dist(x1, y1)
+        const d2 = this._dist(x2, y2)
+
+        const lineLength =  Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
+        const buffer = 0.1
+
+        if (d1+d2 >= lineLength-buffer && d1+d2 <= lineLength+buffer) {
+            return true;
+        }
+    }
+
+    _handleWallCollision() {
+        const upWallCollide = this._lineCircle(0, 0, canvas.width, 0)
+        const bottomWallCollide = this._lineCircle(0, canvas.height, canvas.width, canvas.height)
+        if(upWallCollide || bottomWallCollide) {
+            this.vY *= -1
+        }
+
+        const rightWallCollide = this._lineCircle(canvas.width, 0, canvas.width, canvas.height)
+        const leftWallCollide = this._lineCircle(0, 0, 0, canvas.height)
+        if(rightWallCollide || leftWallCollide ) {
+            this.vX *= -1
+        }
+    }
+
+    _handleBallsCollision() {
+        if(this.color === color.GHOST) {
+            return;
+        }
+
+        const circleNoGhost = circleList.filter(it => it.color !== color.GHOST)
+        for(let i = 0; i < circleNoGhost.length;i++ ) {
+            const {x, y, size} = circleNoGhost[i]
+            const isCollide = this._isCollideOrIn(x, y, size)
+            if(isCollide && (this.x != x || this.y != y)) {
+                
+                if(this.x < x) {
+                    this.vX = -this.vX
+                }
+
+                if(this.x > x) {
+                    this.vX = Math.abs(this.vX)
+                }
+
+                if(this.y > y) {
+                    this.vY = Math.abs(this.vY)
+                }
+
+                if(this.y < y) {
+                    this.vY = -this.vY
+                }
+
+                // feature for ghost
+                // if(this.y < y) {
+                //     this.vY *= this.vY > 0 ? -1 : 1
+                //     circleList[i].vY *= circleList[i].vY > 0 ? -1 : 1
+                // }
+                // if(this.y > y) {
+                //     this.vY *= this.vY < 0 ? -1 : 1
+                //     circleList[i].vY *= circleList[i].vY < 0 ? -1 : 1
+                // }
+            }
+        }
+    }
+
     update() {
-        this._addResizeAnimation()
+        this.x += this.vX
+        this.y += this.vY
+        this._handleWallCollision()
+        this._handleBallsCollision()
         if(this._isCollideOrIn(mouse.x, mouse.y, 1)) {
             this.isClicked = true
         }
@@ -126,6 +234,9 @@ class Circle {
 }
 
 function handleCircles() {
+    const normalCircle = circleList.filter(it => it.color !== color.GHOST)
+    const ghostCircle = circleList.filter(it => it.color === color.GHOST)
+    circleList = [...normalCircle, ...ghostCircle]
     for(let i=0; i < circleList.length; i++) {
         circleList[i].update()
         circleList[i].draw()
@@ -148,7 +259,7 @@ function handleScore() {
 /**
  * INIT
  */
-let maxCircles = 15
+let maxCircles = 10
 for(let i =0; i< maxCircles; i++) {
     circleList.push(new Circle())
 }
