@@ -18,6 +18,7 @@ const color = {
     "GHOST": "rgba(251, 251, 255, 0.2)"
 }
 let circleList = []
+let particleList = []
 let playerScore = 0
 let mouse = {
     x: null,
@@ -27,6 +28,30 @@ let mouse = {
 /**
  * USER DEFINED FUNCTIONS
  */
+class Particle {
+    constructor(x, y, color) {
+        this.x =x
+        this.y =y
+        this.size = Math.random() * 6 + 4
+        this.vX = Math.random() * 4-2
+        this.vY = Math.random() * 4-2
+        this.color = color
+    }
+
+    update() {
+        this.x += this.vX
+        this.y += this.vY
+        if(this.size > 0.2) this.size -= 0.2
+    }
+
+    draw() {
+        ctx.fillStyle = this.color
+        ctx.beginPath()
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
+        ctx.fill()
+    }
+}
+
 class Circle {
     constructor() {
         this.x = this._randomPoinInCanvas()
@@ -35,8 +60,11 @@ class Circle {
         this.vY = Math.random() * 3 - 1.5
 
         this.size = Math.random() * 50 + 15
+        this.sizeModifier = 0
+
         this.color = this._generateColor()
         this.score = this._calculateScore()
+        this.ttl = this._generateTTL()
         this.isClicked = false
     }
 
@@ -47,7 +75,7 @@ class Circle {
 
     _generateColor() {
         const dangerCount = circleList.filter(it => it.color === color.DANGER).length
-        const dangerRandom = Math.floor(Math.random() * 1 + 1)
+        const dangerRandom = Math.floor(Math.random() * 2 + 1)
         if(dangerCount >= dangerRandom) {
             if(this.size <= 22) {
                 return color.GOLD
@@ -74,6 +102,13 @@ class Circle {
                 return 30
             case color.GHOST:
                 return -5
+        }
+    }
+
+    _generateTTL() {
+        if(this.color === color.GHOST) {
+            const randLifetime = Math.random() * 5000 + 5000
+            return Date.now() + randLifetime
         }
     }
 
@@ -175,13 +210,16 @@ class Circle {
     }
 
     _handleBallsCollision() {
-        if(this.color === color.GHOST) {
-            return;
-        }
+        for(let i = 0; i < circleList.length;i++ ) {
+            const {x, y, size, color: cColor} = circleList[i]
 
-        const circleNoGhost = circleList.filter(it => it.color !== color.GHOST)
-        for(let i = 0; i < circleNoGhost.length;i++ ) {
-            const {x, y, size} = circleNoGhost[i]
+            if(this.color === color.GHOST) {
+                break;
+            }
+            if(cColor === color.GHOST) {
+                continue;
+            }
+
             const isCollide = this._isCollideOrIn(x, y, size)
             if(isCollide && (this.x != x || this.y != y)) {
                 
@@ -214,14 +252,28 @@ class Circle {
         }
     }
 
+    _handleGhostDisappearance() {
+        if(this.color === color.GHOST && this.ttl < Date.now() && this.sizeModifier === 0) {
+            this.sizeModifier = -1
+        }
+    }
+
     update() {
         this.x += this.vX
         this.y += this.vY
+        
         this._handleWallCollision()
         this._handleBallsCollision()
+        this._handleGhostDisappearance()
+
         if(this._isCollideOrIn(mouse.x, mouse.y, 1)) {
             this.isClicked = true
         }
+
+        const modifiedSize = this.size + this.sizeModifier
+        this.size = modifiedSize >= 0.1 
+            ? modifiedSize
+            : 0.1
     }
 
     draw() {
@@ -237,12 +289,20 @@ function handleCircles() {
     const normalCircle = circleList.filter(it => it.color !== color.GHOST)
     const ghostCircle = circleList.filter(it => it.color === color.GHOST)
     circleList = [...normalCircle, ...ghostCircle]
+    
     for(let i=0; i < circleList.length; i++) {
         circleList[i].update()
         circleList[i].draw()
 
         if(circleList[i].isClicked) {
             playerScore += circleList[i].score
+            circleList[i].score = 0
+            circleList[i].sizeModifier = -(circleList[i].size / 2)
+         
+            particleList.push(new Particle(circleList[i].x, circleList[i].y, circleList[i].color))
+        }
+
+        if(circleList[i].size === 0.1) {
             circleList.splice(i, 1)
             circleList.push(new Circle())
             i--
@@ -254,6 +314,17 @@ function handleScore() {
     ctx.fillStyle="white"
     ctx.font = "30px arial"
     ctx.fillText("Score: "+playerScore, canvas.width - 200, 50)
+}
+
+function handleParticles() {
+    for(i = 0; i < particleList.length; i++) {
+        particleList[i].update()
+        particleList[i].draw()
+        if(particleList[i].size <= 0.2) {
+            particleList.splice(i, 1)
+            i--
+        }
+    }
 }
 
 /**
